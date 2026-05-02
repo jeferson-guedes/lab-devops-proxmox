@@ -1,0 +1,41 @@
+# =========================================================
+# Segredos e Dados Sensiveis — NUNCA commitar estes arquivos
+# =========================================================
+
+# Variaveis do Terraform com segredos
+*.auto.tfvars
+*.tfvars
+
+# State do Terraform (contém IPs, MACs, detalhes das VMs)
+terraform.tfstate
+terraform.tfstate.backup
+.terraform.tfstate.lock.info
+
+# Plugins baixados pelo terraform init
+**/.terraform/
+
+# Arquivo de lock pode ser comitado (não contém segredos)
+!.terraform.lock.hcl
+
+# Arquivos de ambiente locais
+.env
+.env.local
+.env.*.local
+
+# Kubeconfig gerado localmente (contém tokens de acesso ao cluster)
+kubeconfig
+kubeconfig.yaml
+*.kubeconfig
+
+# Credenciais SSH privadas (nunca a chave privada, apenas .pub é segura)
+*.pem
+id_rsa
+id_ed25519
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp

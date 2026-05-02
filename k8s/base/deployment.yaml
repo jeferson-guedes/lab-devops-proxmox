@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-gitops-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: my-gitops-api
+  template:
+    metadata:
+      labels:
+        app: my-gitops-api
+    spec:
+      # Garantir que o pod nunca rode como root
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+
+      containers:
+      - name: api
+        image: my-gitops-api:latest
+        ports:
+        - containerPort: 8080
+
+        # Hardening do container
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+
+        # Kubernetes verifica se a API está pronta para receber tráfego.
+        # O pod só entra no balanceamento DEPOIS que este probe passar.
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3
+
+        # Kubernetes reinicia o container se ele travar ou parar de responder.
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          failureThreshold: 3

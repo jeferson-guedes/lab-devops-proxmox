@@ -1,0 +1,15 @@
+# Segredos — nunca commitar
+*.auto.tfvars
+*.tfvars
+.env
+
+# Estado da infraestrutura
+terraform.tfstate
+terraform.tfstate.backup
+.terraform.tfstate.lock.info
+
+# Plugins (baixados pelo terraform init, não precisam de versionamento)
+.terraform/
+
+# Planos salvos (podem conter dados sensíveis)
+*.tfplan

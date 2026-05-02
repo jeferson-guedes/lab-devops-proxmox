@@ -1,0 +1,35 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-gitops-api-netpol
+spec:
+  podSelector:
+    matchLabels:
+      app: my-gitops-api
+
+  policyTypes:
+    - Ingress
+    - Egress
+
+  # Tráfego PERMITIDO de entrada:
+  # Apenas conexões na porta 8080 (a porta da API)
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 8080
+
+  # Tráfego PERMITIDO de saída:
+  # DNS (para resolver nomes de outros serviços)
+  # HTTPS (para chamadas a APIs externas se necessário)
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - ports:
+        - protocol: TCP
+          port: 443
+    - ports:
+        - protocol: TCP
+          port: 5432  # PostgreSQL (para comunicação com o banco de dados)
