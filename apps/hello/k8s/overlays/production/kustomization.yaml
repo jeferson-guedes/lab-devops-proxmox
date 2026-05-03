@@ -7,11 +7,11 @@ resources:
 # Prefixo pra distinguir recursos de produção dos de outros overlays no futuro.
 namePrefix: prod-
 
-# Imagem publicada pelo workflow .github/workflows/build.yml em ghcr.io.
+# Imagem publicada pelo workflow .github/workflows/build-hello.yml no Docker Hub.
 # Repositório público: pull não precisa de imagePullSecret.
 images:
   - name: my-gitops-api
-    newName: ghcr.io/jeferson-guedes/lab-devops-proxmox/hello
+    newName: docker.io/guedesjeferson/hello-go
     newTag: latest
 
 replicas:

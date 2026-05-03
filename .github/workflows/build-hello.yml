@@ -1,8 +1,10 @@
 name: build-hello
 
-# Builda a imagem da API Go (apps/hello) e publica em ghcr.io a cada push em main
-# que toque os arquivos da app ou o próprio workflow. Repo público → imagem pública,
-# pull do ArgoCD não precisa de imagePullSecret.
+# Builda a imagem da API Go (apps/hello) e publica em Docker Hub a cada push em main
+# que toque os arquivos da app ou o próprio workflow. Imagem pública → ArgoCD/K8s
+# fazem pull sem imagePullSecret.
+#
+# Pré-requisito: secret DOCKER_HUB_TOKEN configurado no repo (Settings → Secrets).
 
 on:
   push:
@@ -12,12 +14,12 @@ on:
       - '.github/workflows/build-hello.yml'
   workflow_dispatch:
 
+env:
+  IMAGE: docker.io/guedesjeferson/hello-go
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
     steps:
       - uses: actions/checkout@v4
 
@@ -25,15 +27,15 @@ jobs:
 
       - uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: docker.io
+          username: guedesjeferson
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       - name: Compute image metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}/hello
+          images: ${{ env.IMAGE }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,format=short
