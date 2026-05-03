@@ -39,6 +39,10 @@ kubeconfig.yaml
 id_rsa
 id_ed25519
 
+# Notas/credenciais locais (qualquer arquivo *.local.md fica fora do git)
+*.local.md
+.secrets/
+
 # macOS
 .DS_Store
 
