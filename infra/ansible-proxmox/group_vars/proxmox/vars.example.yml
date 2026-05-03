@@ -1,0 +1,11 @@
+---
+# Copie pra `vars.yml` (gitignored) e preencha com seus valores reais.
+#
+# Estas variáveis alimentam infra/ansible-proxmox/templates/interfaces.j2.
+
+wifi_iface: wlp2s0
+wifi_ssid: "MEU_SSID"
+wifi_psk: "MINHA_SENHA"
+
+bridge: vmbr0
+bridge_address: "BRIDGE_IP/24"   # ex: 192.168.15.200/24

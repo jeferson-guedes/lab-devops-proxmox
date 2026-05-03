@@ -1,0 +1,8 @@
+#!/bin/sh
+# Gerenciado pelo Ansible (infra/ansible-proxmox/playbook.yml) — não editar à mão.
+# Aplica rotas /32 das VMs do cluster K3s via {{ cluster_bridge }}.
+set -eu
+
+{% for ip in cluster_node_ips %}
+ip route replace {{ ip }}/32 dev {{ cluster_bridge }}
+{% endfor %}

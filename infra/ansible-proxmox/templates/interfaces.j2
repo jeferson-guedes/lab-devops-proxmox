@@ -1,0 +1,28 @@
+# Gerenciado pelo Ansible (infra/ansible-proxmox/interfaces.yml).
+# Editar via infra/ansible-proxmox/templates/interfaces.j2 + infra/ansible-proxmox/group_vars/proxmox/vars.yml.
+#
+# Notas:
+# - ip_forward é gerenciado em /etc/sysctl.d/99-k3s-cluster.conf (infra/ansible-proxmox/playbook.yml).
+# - Regras iptables (NAT/FORWARD/DNAT) ficam em /etc/iptables/rules.v4 via
+#   iptables-persistent (infra/ansible-proxmox/network.yml). Não são adicionadas em post-up daqui.
+# - Rotas /32 das VMs sobem via systemd unit k3s-cluster-routes (infra/ansible-proxmox/playbook.yml).
+
+auto lo
+iface lo inet loopback
+
+iface nic0 inet manual
+iface nic1 inet manual
+
+auto {{ wifi_iface }}
+iface {{ wifi_iface }} inet dhcp
+        wpa-ssid "{{ wifi_ssid }}"
+        wpa-psk "{{ wifi_psk }}"
+
+auto {{ bridge }}
+iface {{ bridge }} inet static
+        address {{ bridge_address }}
+        bridge-ports none
+        bridge-stp off
+        bridge-fd 0
+
+source /etc/network/interfaces.d/*

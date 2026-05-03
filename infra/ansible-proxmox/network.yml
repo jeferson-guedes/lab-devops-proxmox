@@ -1,0 +1,124 @@
+---
+# Plano A — captura idempotente da rede NAT do Proxmox.
+# - Instala iptables-persistent
+# - Faz backup das regras atuais
+# - Limpa as chains gerenciadas (FORWARD, nat:POSTROUTING, nat:PREROUTING)
+#   pra remover duplicatas acumuladas dos `post-up` rodando múltiplas vezes
+# - Redeclara as regras com comments (`ansible:k3s-*`) — ficam rastreáveis
+# - Persiste com netfilter-persistent
+#
+# Uso:
+#   ansible-playbook \
+#     -i infra/ansible-k3s/inventory/hosts.yml \
+#     -i infra/ansible-proxmox/inventory.yml \
+#     infra/ansible-proxmox/network.yml
+#
+# Pra desligar o DNAT do API server (caso prefira só o túnel SSH):
+#   ansible-playbook ... infra/ansible-proxmox/network.yml -e api_dnat_enabled=false
+
+- name: Configurar NAT e FORWARD do Proxmox
+  hosts: proxmox
+  become: true
+  vars:
+    cluster_subnet: 192.168.15.0/24
+    cluster_bridge: vmbr0
+    cluster_uplink: wlp2s0
+    api_dnat_enabled: true
+    api_dnat_target: 192.168.15.100
+    api_dnat_port: 6443
+  tasks:
+    - name: Instalar iptables-persistent
+      ansible.builtin.apt:
+        name: iptables-persistent
+        state: present
+        update_cache: false
+
+    - name: Backup do estado iptables atual
+      ansible.builtin.shell: |
+        set -e
+        ts=$(date +%s)
+        iptables-save > /root/iptables.backup.${ts}.v4
+        ip6tables-save > /root/iptables.backup.${ts}.v6
+        echo "/root/iptables.backup.${ts}.*"
+      register: iptables_backup
+      changed_when: false
+
+    - name: Mostrar caminho do backup
+      ansible.builtin.debug:
+        msg: "Backup gerado em {{ iptables_backup.stdout }}"
+
+    - name: Flush chain FORWARD (será redeclarada)
+      ansible.builtin.iptables:
+        chain: FORWARD
+        flush: true
+
+    - name: Flush chain nat:POSTROUTING
+      ansible.builtin.iptables:
+        table: nat
+        chain: POSTROUTING
+        flush: true
+
+    - name: Flush chain nat:PREROUTING
+      ansible.builtin.iptables:
+        table: nat
+        chain: PREROUTING
+        flush: true
+
+    - name: NAT MASQUERADE — saída do cluster via uplink
+      ansible.builtin.iptables:
+        table: nat
+        chain: POSTROUTING
+        source: "{{ cluster_subnet }}"
+        destination: "! {{ cluster_subnet }}"
+        out_interface: "{{ cluster_uplink }}"
+        jump: MASQUERADE
+        comment: ansible:k3s-nat-masq
+
+    - name: FORWARD — bridge → uplink
+      ansible.builtin.iptables:
+        chain: FORWARD
+        in_interface: "{{ cluster_bridge }}"
+        out_interface: "{{ cluster_uplink }}"
+        jump: ACCEPT
+        comment: ansible:k3s-fwd-out
+
+    - name: FORWARD — uplink → bridge (RELATED,ESTABLISHED)
+      ansible.builtin.iptables:
+        chain: FORWARD
+        in_interface: "{{ cluster_uplink }}"
+        out_interface: "{{ cluster_bridge }}"
+        ctstate:
+          - RELATED
+          - ESTABLISHED
+        jump: ACCEPT
+        comment: ansible:k3s-fwd-in
+
+    - name: PREROUTING — DNAT 6443 → master (fallback do túnel SSH)
+      ansible.builtin.iptables:
+        table: nat
+        chain: PREROUTING
+        in_interface: "{{ cluster_uplink }}"
+        protocol: tcp
+        destination_port: "{{ api_dnat_port | string }}"
+        jump: DNAT
+        to_destination: "{{ api_dnat_target }}:{{ api_dnat_port }}"
+        comment: ansible:k3s-api-dnat
+      when: api_dnat_enabled
+
+    - name: FORWARD — pacotes do DNAT 6443
+      ansible.builtin.iptables:
+        chain: FORWARD
+        protocol: tcp
+        destination: "{{ api_dnat_target }}"
+        destination_port: "{{ api_dnat_port | string }}"
+        ctstate:
+          - NEW
+          - RELATED
+          - ESTABLISHED
+        jump: ACCEPT
+        comment: ansible:k3s-api-fwd
+      when: api_dnat_enabled
+
+    - name: Persistir regras (netfilter-persistent save)
+      ansible.builtin.command: netfilter-persistent save
+      changed_when: true

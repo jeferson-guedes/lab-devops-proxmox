@@ -1,0 +1,53 @@
+---
+# Plano C — gerencia /etc/network/interfaces do Proxmox via template.
+#
+# IMPORTANTE: este playbook altera a config de rede do gateway do cluster.
+# - Faz backup antes.
+# - Aplica com `ifreload -a` (ifupdown2), que faz reload diferencial — não bouncing.
+# - Em caso de problema: `cp /etc/network/interfaces.backup.<ts> /etc/network/interfaces && ifreload -a`
+#
+# Pré-requisito:
+#   cp infra/ansible-proxmox/group_vars/proxmox/vars.example.yml infra/ansible-proxmox/group_vars/proxmox/vars.yml
+#   # editar vars.yml com SSID/PSK reais
+#
+# Uso:
+#   ansible-playbook \
+#     -i infra/ansible-k3s/inventory/hosts.yml \
+#     -i infra/ansible-proxmox/inventory.yml \
+#     infra/ansible-proxmox/interfaces.yml
+
+- name: Aplicar /etc/network/interfaces gerenciado
+  hosts: proxmox
+  become: true
+  tasks:
+    - name: Validar que vars.yml existe localmente
+      ansible.builtin.assert:
+        that:
+          - wifi_iface is defined
+          - wifi_ssid is defined
+          - wifi_psk is defined
+          - bridge is defined
+          - bridge_address is defined
+        fail_msg: >-
+          Faltam vars. Copie infra/ansible-proxmox/group_vars/proxmox/vars.example.yml
+          para vars.yml e preencha.
+
+    - name: Backup do /etc/network/interfaces atual
+      ansible.builtin.copy:
+        src: /etc/network/interfaces
+        dest: "/etc/network/interfaces.backup.{{ ansible_date_time.epoch }}"
+        remote_src: true
+        mode: '0644'
+      changed_when: false
+
+    - name: Renderizar /etc/network/interfaces
+      ansible.builtin.template:
+        src: interfaces.j2
+        dest: /etc/network/interfaces
+        mode: '0644'
+      register: interfaces_change
+
+    - name: Recarregar rede com ifreload (sem derrubar interfaces)
+      ansible.builtin.command: ifreload -a
+      when: interfaces_change.changed
+      changed_when: true

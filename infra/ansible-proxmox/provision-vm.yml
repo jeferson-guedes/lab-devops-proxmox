@@ -1,0 +1,105 @@
+---
+# Provisiona uma VM no Proxmox a partir do template (cloud-init).
+# Idempotente: se VMID já existe, pula tudo.
+#
+# Uso (parâmetros obrigatórios via -e):
+#   ansible-playbook \
+#     -i infra/ansible-k3s/inventory/hosts.yml \
+#     -i infra/ansible-proxmox/inventory.yml \
+#     infra/ansible-proxmox/provision-vm.yml \
+#     -e vmid=103 -e name=k8s-worker-02 -e ip=192.168.15.103
+#
+# Parâmetros opcionais (defaults pareados com k8s-worker-01):
+#   -e cidr=24 -e gw=192.168.15.200 -e nameserver=8.8.8.8
+#   -e memory=3072 -e cores=2 -e disk_size=20G
+#   -e ciuser=ubuntu
+#   -e sshkey_path=~/.ssh/id_ed25519.pub
+#   -e template_vmid=9000
+
+- name: Provisionar VM no Proxmox via cloud-init
+  hosts: proxmox
+  become: true
+  vars:
+    template_vmid: 9000
+    cidr: 24
+    gw: 192.168.15.200
+    nameserver: 8.8.8.8
+    memory: 3072
+    cores: 2
+    disk_size: 20G
+    ciuser: ubuntu
+    sshkey_path: ~/.ssh/id_ed25519.pub
+  tasks:
+    - name: Validar parâmetros obrigatórios
+      ansible.builtin.assert:
+        that:
+          - vmid is defined
+          - name is defined
+          - ip is defined
+        fail_msg: "Faltam -e vmid=... -e name=... -e ip=..."
+
+    - name: Verificar se a VM {{ vmid }} já existe
+      ansible.builtin.command: "qm status {{ vmid }}"
+      register: vm_check
+      failed_when: false
+      changed_when: false
+
+    - name: Provisionar nova VM
+      when: vm_check.rc != 0
+      block:
+        - name: Verificar se template existe
+          ansible.builtin.command: "qm status {{ template_vmid }}"
+          changed_when: false
+
+        - name: Clonar template (full clone)
+          ansible.builtin.command: >
+            qm clone {{ template_vmid }} {{ vmid }}
+            --name {{ name }}
+            --full
+
+        - name: Resize disco para {{ disk_size }}
+          ansible.builtin.command: "qm resize {{ vmid }} scsi0 {{ disk_size }}"
+          register: resize_out
+          failed_when:
+            - resize_out.rc != 0
+            - "'is smaller' not in resize_out.stderr"
+
+        - name: Configurar memória / cores / autostart / balloon
+          ansible.builtin.command: >
+            qm set {{ vmid }}
+            --memory {{ memory }}
+            --cores {{ cores }}
+            --balloon 0
+            --onboot 1
+
+        - name: Configurar rede via cloud-init
+          ansible.builtin.command: >
+            qm set {{ vmid }}
+            --ipconfig0 ip={{ ip }}/{{ cidr }},gw={{ gw }}
+            --nameserver {{ nameserver }}
+            --ciuser {{ ciuser }}
+
+        - name: Copiar SSH public key pro Proxmox (temp)
+          ansible.builtin.copy:
+            content: "{{ lookup('ansible.builtin.file', sshkey_path) }}\n"
+            dest: "/tmp/qm-sshkey-{{ vmid }}.pub"
+            mode: '0600'
+
+        - name: Aplicar SSH key via cloud-init
+          ansible.builtin.command: "qm set {{ vmid }} --sshkeys /tmp/qm-sshkey-{{ vmid }}.pub"
+
+        - name: Limpar arquivo temp da chave
+          ansible.builtin.file:
+            path: "/tmp/qm-sshkey-{{ vmid }}.pub"
+            state: absent
+
+        - name: Iniciar VM
+          ansible.builtin.command: "qm start {{ vmid }}"
+
+        - name: Aguardar SSH responder em {{ ip }}
+          ansible.builtin.wait_for:
+            host: "{{ ip }}"
+            port: 22
+            state: started
+            timeout: 240
+            delay: 10

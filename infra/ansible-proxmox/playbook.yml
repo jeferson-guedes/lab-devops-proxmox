@@ -1,0 +1,101 @@
+---
+# Configura o Proxmox como roteador das VMs do cluster K3s.
+# - Habilita IPv4 forwarding (runtime + persistente).
+# - Instala um script + unit systemd que aplica `ip route replace <vm>/32 dev vmbr0`
+#   pra cada VM listada nos grupos k3s_master/k3s_worker do inventory principal.
+#
+# Uso (a partir da raiz do repo):
+#   ansible-playbook \
+#     -i infra/ansible-k3s/inventory/hosts.yml \
+#     -i infra/ansible-proxmox/inventory.yml \
+#     infra/ansible-proxmox/playbook.yml
+#
+# Pra adicionar um nó novo: basta acrescentar ele no inventory principal e re-rodar.
+
+- name: Configurar Proxmox como gateway das VMs do cluster
+  hosts: proxmox
+  become: true
+  vars:
+    cluster_bridge: vmbr0
+    cluster_node_groups:
+      - k3s_master
+      - k3s_worker
+  pre_tasks:
+    - name: Coletar IPs das VMs do cluster a partir do inventory principal
+      ansible.builtin.set_fact:
+        cluster_node_ips: >-
+          {{
+            cluster_node_groups
+            | map('extract', groups)
+            | flatten
+            | map('extract', hostvars, 'ansible_host')
+            | list
+          }}
+
+    - name: Falhar se nenhum host de cluster foi encontrado
+      ansible.builtin.assert:
+        that: cluster_node_ips | length > 0
+        fail_msg: >-
+          Nenhum host nos grupos {{ cluster_node_groups }}.
+          Rode com `-i infra/ansible-k3s/inventory/hosts.yml -i infra/ansible-proxmox/inventory.yml`.
+
+  tasks:
+    - name: Habilitar IPv4 forwarding (persistente)
+      ansible.builtin.copy:
+        dest: /etc/sysctl.d/99-k3s-cluster.conf
+        mode: '0644'
+        content: |
+          net.ipv4.ip_forward=1
+      notify: aplicar sysctl
+
+    - name: Garantir IPv4 forwarding em runtime
+      ansible.builtin.command: sysctl -w net.ipv4.ip_forward=1
+      changed_when: false
+
+    - name: Instalar script com rotas /32 das VMs
+      ansible.builtin.template:
+        src: k3s-cluster-routes.sh.j2
+        dest: /usr/local/sbin/k3s-cluster-routes
+        mode: '0755'
+      notify: aplicar rotas
+
+    - name: Instalar unit systemd que aplica rotas no boot
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/k3s-cluster-routes.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Rotas /32 das VMs do cluster K3s via {{ cluster_bridge }}
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          Type=oneshot
+          ExecStart=/usr/local/sbin/k3s-cluster-routes
+          RemainAfterExit=yes
+
+          [Install]
+          WantedBy=multi-user.target
+      notify:
+        - daemon-reload
+        - aplicar rotas
+
+    - name: Habilitar e iniciar o serviço de rotas
+      ansible.builtin.systemd:
+        name: k3s-cluster-routes
+        enabled: true
+        state: started
+
+  handlers:
+    - name: aplicar sysctl
+      ansible.builtin.command: sysctl --system
+      changed_when: false
+
+    - name: daemon-reload
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: aplicar rotas
+      ansible.builtin.systemd:
+        name: k3s-cluster-routes
+        state: restarted

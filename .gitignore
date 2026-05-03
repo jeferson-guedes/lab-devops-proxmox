@@ -2,6 +2,13 @@
 # Segredos e Dados Sensiveis — NUNCA commitar estes arquivos
 # =========================================================
 
+# Ansible — arquivos com IPs e topologia de rede real
+# Commitar apenas os *.example.yml (templates com placeholders)
+infra/ansible-k3s/inventory/hosts.yml
+infra/ansible-k3s/group_vars/all.yml
+infra/ansible-proxmox/inventory.yml
+infra/ansible-proxmox/group_vars/proxmox/vars.yml
+
 # Variaveis do Terraform com segredos
 *.auto.tfvars
 *.tfvars

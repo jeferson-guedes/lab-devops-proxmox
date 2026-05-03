@@ -1,0 +1,80 @@
+---
+# Instala e configura o K3s no nó Master (Control Plane)
+
+- name: Garantir pré-requisitos do sistema
+  apt:
+    name:
+      - curl
+      - ca-certificates
+    state: present
+    update_cache: true
+
+- name: Instalar K3s Server (Control Plane)
+  shell: >
+    curl -sfL https://get.k3s.io |
+    {% if k3s_version != '' %}INSTALL_K3S_VERSION="{{ k3s_version }}"{% endif %}
+    sh -s - server
+    --node-ip={{ ansible_host }}
+    --disable=traefik
+  args:
+    creates: /usr/local/bin/k3s
+  register: k3s_install
+
+- name: Aguardar o K3s estar pronto
+  wait_for:
+    port: "{{ k3s_api_port }}"
+    host: "{{ ansible_host }}"
+    delay: 5
+    timeout: 60
+
+- name: Ler o token de join do cluster
+  slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: k3s_token_raw
+
+- name: Salvar token como fact global (para o worker usar)
+  set_fact:
+    k3s_node_token: "{{ k3s_token_raw.content | b64decode | trim }}"
+
+- name: Ler o kubeconfig
+  slurp:
+    src: /etc/rancher/k3s/k3s.yaml
+  register: kubeconfig_raw
+
+- name: Salvar kubeconfig localmente no Mac (apontando para o túnel SSH)
+  ansible.builtin.copy:
+    content: "{{ kubeconfig_raw.content | b64decode | replace('default', 'homelab') }}"
+    dest: "{{ local_kubeconfig_path }}"
+    mode: '0600'
+  delegate_to: localhost
+  become: false
+
+- name: Garantir que ~/.ssh existe na máquina local
+  ansible.builtin.file:
+    path: "{{ ssh_config_path | dirname }}"
+    state: directory
+    mode: '0700'
+  delegate_to: localhost
+  become: false
+
+- name: Configurar bloco SSH com túnel pro API server do K3s
+  ansible.builtin.blockinfile:
+    path: "{{ ssh_config_path }}"
+    create: true
+    mode: '0600'
+    marker: "# {mark} ANSIBLE MANAGED BLOCK k3s-tunnel"
+    block: |
+      Host {{ ssh_tunnel_alias }}
+          HostName {{ k3s_master_ip }}
+          User {{ ssh_local_user }}
+          IdentityFile {{ ssh_local_identity }}
+          ProxyJump {{ ssh_jump_host }}
+          LocalForward {{ k3s_api_port }} 127.0.0.1:{{ k3s_api_port }}
+          ServerAliveInterval 30
+          ServerAliveCountMax 3
+          ControlMaster auto
+          ControlPath ~/.ssh/cm-%r@%h:%p
+          ControlPersist 10m
+          StrictHostKeyChecking no
+  delegate_to: localhost
+  become: false

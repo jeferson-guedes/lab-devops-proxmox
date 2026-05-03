@@ -1,0 +1,27 @@
+---
+# Instala o K3s Agent e faz o join no cluster usando o token do Master
+
+- name: Garantir pré-requisitos do sistema
+  apt:
+    name:
+      - curl
+      - ca-certificates
+    state: present
+    update_cache: true
+
+- name: Instalar K3s Agent e fazer join no cluster
+  shell: >
+    curl -sfL https://get.k3s.io |
+    {% if k3s_version != '' %}INSTALL_K3S_VERSION="{{ k3s_version }}"{% endif %}
+    K3S_URL="https://{{ k3s_master_ip }}:{{ k3s_api_port }}"
+    K3S_TOKEN="{{ hostvars[groups['k3s_master'][0]]['k3s_node_token'] }}"
+    sh -s - agent
+    --node-ip={{ ansible_host }}
+  args:
+    creates: /usr/local/bin/k3s
+
+- name: Confirmar que o serviço K3s Agent está rodando
+  systemd:
+    name: k3s-agent
+    state: started
+    enabled: true

@@ -1,0 +1,18 @@
+---
+# Playbook principal — instala o K3s no cluster completo
+# Uso: ansible-playbook site.yml
+#
+# O Ansible executa na ordem: primeiro Master, depois Workers.
+# O token de join é extraído automaticamente do Master e passado para os Workers.
+
+- name: Configurar K3s Control Plane (Master)
+  hosts: k3s_master
+  gather_facts: true
+  roles:
+    - k3s_master
+
+- name: Configurar K3s Agent (Worker)
+  hosts: k3s_worker
+  gather_facts: true
+  roles:
+    - k3s_worker
