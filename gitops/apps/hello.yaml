@@ -1,0 +1,27 @@
+---
+# Application gerenciado pela root app (gitops/bootstrap/root-app.yaml).
+# Aponta pro overlay de produção da API Go em apps/hello/k8s/overlays/production.
+# A imagem é publicada pelo workflow build-hello.yml em ghcr.io.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: hello
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jeferson-guedes/lab-devops-proxmox.git
+    targetRevision: main
+    path: apps/hello/k8s/overlays/production
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: hello
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

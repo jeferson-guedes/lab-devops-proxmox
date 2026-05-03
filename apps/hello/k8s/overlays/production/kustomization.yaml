@@ -4,17 +4,21 @@ kind: Kustomization
 resources:
   - ../../base
 
-# Prefixo para diferenciar os recursos de produção
+# Prefixo pra distinguir recursos de produção dos de outros overlays no futuro.
 namePrefix: prod-
 
-# ATENÇÃO: Substitua SEU_USUARIO_DOCKER pelo seu usuário real do Docker Hub.
-# Esta imagem é atualizada automaticamente pelo GitHub Actions a cada push na main.
+# Imagem publicada pelo workflow .github/workflows/build.yml em ghcr.io.
+# Repositório público: pull não precisa de imagePullSecret.
 images:
-  - name: my-gitops-api:latest
-    newName: docker.io/SEU_USUARIO_DOCKER/my-gitops-api
-    newTag: v1.0.0  # Esta tag será sobrescrita pelo pipeline de CI/CD
+  - name: my-gitops-api
+    newName: ghcr.io/jeferson-guedes/lab-devops-proxmox/hello
+    newTag: latest
 
-# Produção roda com 3 réplicas para alta disponibilidade
 replicas:
   - name: my-gitops-api
     count: 3
+
+labels:
+  - pairs:
+      app: my-gitops-api
+    includeSelectors: true

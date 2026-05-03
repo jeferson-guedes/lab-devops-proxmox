@@ -1,23 +1,13 @@
-# Etapa 1: Build
-FROM golang:1.21-alpine AS builder
-
-WORKDIR /app
-
-# Copia os arquivos do projeto
+# Etapa 1: build estático
+FROM golang:1.23-alpine AS builder
+WORKDIR /src
 COPY go.mod ./
 COPY main.go ./
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/api-server .
 
-# Compila o binário estático
-RUN CGO_ENABLED=0 GOOS=linux go build -o api-server main.go
-
-# Etapa 2: Execução (Imagem muito menor, apenas com o binário)
-FROM alpine:latest
-
-WORKDIR /root/
-
-# Copia o binário compilado da etapa anterior
-COPY --from=builder /app/api-server .
-
+# Etapa 2: runtime distroless (sem shell, sem package manager).
+# Compatível com runAsNonRoot e readOnlyRootFilesystem do Pod.
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=builder /out/api-server /api-server
 EXPOSE 8080
-
-CMD ["./api-server"]
+ENTRYPOINT ["/api-server"]
