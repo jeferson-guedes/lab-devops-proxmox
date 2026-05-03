@@ -44,8 +44,9 @@ infra/
 ├── ansible-k3s/           # instala K3s no master + workers, exporta kubeconfig + túnel SSH
 └── terraform/             # provisiona VMs declarativamente (alternativa ao provision-vm.yml)
 gitops/                    # ArgoCD bootstrap + apps  (em construção)
-k8s/                       # manifests Kustomize da API de exemplo
-main.go, Dockerfile        # API Go simples ("Hello GitOps") pra exercitar o pipeline CI/CD
+apps/
+└── hello/                 # API Go ("Hello GitOps"): main.go + Dockerfile + manifests Kustomize
+docs/                      # planejamento e notas de arquitetura
 ```
 
 ---

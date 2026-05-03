@@ -1,0 +1,32 @@
+---
+# Application raiz ("app of apps") — aponta pro diretório gitops/apps/ deste repo.
+# Tudo que for adicionado lá vira um Application do ArgoCD automaticamente.
+#
+# Aplicado uma única vez via `make install`. A partir daqui, o ArgoCD se
+# auto-gerencia: para adicionar/remover componentes, basta git push em gitops/apps/.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/jeferson-guedes/lab-devops-proxmox.git
+    targetRevision: main
+    path: gitops/apps
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
